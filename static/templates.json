@@ -1,0 +1,14 @@
+{
+  "page": {
+    "default": "<section class=\"article-header\">\n    <p style=\"text-align: center; font-size: 22px; font-weight: bold; color: #333;\">搞笑图片每日精选</p>\n    <p style=\"text-align: center; font-size: 14px; color: #999;\">{{DATE}}</p>\n    <hr style=\"border: none; border-top: 1px solid #eee;\" />\n</section>\n<p style=\"font-size: 15px; color: #555;\">\n    又到了每日开心一刻的时间！整理了一波搞笑图片，希望能让你会心一笑~\n</p>\n\n{{CONTENT}}\n\n<section class=\"article-footer\">\n    <hr style=\"border: none; border-top: 1px solid #eee;\" />\n    <p style=\"text-align: center; font-size: 14px; color: #999;\">\n        整理不易，觉得不错的话点个「在看」分享给朋友吧~\n    </p>\n</section>"
+  },
+  "loop": {
+    "presets": [
+      {
+        "id": "default",
+        "name": "默认",
+        "template": "<section style=\"text-align: center;\" nodeleaf=\"\">\n  {{IMAGE}}\n</section>\n<p style=\"text-align: center; font-size: 15px; color: #555; margin-top: 8px;\">{{TITLE}}</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微信图文生成工具</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #333; height: 100vh; overflow: hidden; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* Header */
+header { background: linear-gradient(135deg, #07c160, #06ad56); color: #fff; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+header h1 { font-size: 18px; font-weight: 600; }
+header .subtitle { font-size: 12px; opacity: .8; margin-top: 2px; }
+header .port { font-size: 12px; opacity: .7; }
+
+/* Status Bar */
+.status-bar { background: #fff; padding: 10px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; flex-wrap: wrap; }
+.status-bar .status-indicator { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.status-bar .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-bar .dot.off { background: #ccc; }
+.status-bar .dot.on { background: #07c160; }
+.status-bar .dot.loading { background: #faad14; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.btn { padding: 6px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 13px; transition: all .2s; }
+.btn-primary { background: #07c160; color: #fff; }
+.btn-primary:hover { background: #06ad56; }
+.btn-primary:disabled { background: #b7ebc8; cursor: not-allowed; }
+.btn-default { background: #fff; color: #333; border: 1px solid #d9d9d9; }
+.btn-default:hover { border-color: #07c160; color: #07c160; }
+.btn-danger { background: #ff4d4f; color: #fff; }
+.btn-danger:hover { background: #ff7875; }
+.btn-sm { padding: 3px 10px; font-size: 12px; }
+.btn-warning { background: #faad14; color: #fff; }
+.btn-warning:hover { background: #ffc53d; }
+
+/* Main Content - split top/bottom */
+.main-content { flex: 1;  flex-direction: column; overflow: auto; }
+.top-section { flex: 0 0 auto; max-height: 50%; display: flex; flex-direction: column; overflow: hidden; }
+.bottom-section { flex: 1; display: flex;height: calc(100vh - 112px); overflow: auto; border-top: 2px solid #e8e8e8; min-height: 0; }
+
+/* Upload Zone */
+.upload-zone { padding: 10px 20px 0; flex-shrink: 0; }
+.drop-area { border: 2px dashed #d9d9d9; border-radius: 10px; padding: 18px 20px; text-align: center; cursor: pointer; transition: all .25s; background: #fafafa; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.drop-area:hover, .drop-area.drag-over { border-color: #07c160; background: #f0fff5; transform: scale(1.005); }
+.drop-area.drag-over { border-width: 3px; }
+.drop-area .upload-icon { width: 36px; height: 36px; border-radius: 50%; background: #e8f8ee; display: flex; align-items: center; justify-content: center; }
+.drop-area .upload-icon svg { width: 20px; height: 20px; fill: #07c160; }
+.drop-area .upload-text { font-size: 14px; color: #555; font-weight: 500; }
+.drop-area .upload-hint { font-size: 12px; color: #bbb; }
+.drop-area input[type="file"] { display: none; }
+.drop-area .upload-progress { display: none; width: 100%; max-width: 300px; margin-top: 4px; }
+.drop-area .upload-progress.active { display: block; }
+.drop-area .upload-progress bar { display: block; height: 4px; background: #e8e8e8; border-radius: 2px; overflow: hidden; }
+.drop-area .upload-progress bar span { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #07c160, #06d96b); border-radius: 2px; transition: width .3s; }
+
+/* File Grid */
+.file-section { padding: 6px 20px 0; overflow-y: auto; flex: 1; min-height: 0; }
+.file-section .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.file-section .header-row h3 { font-size: 13px; color: #666; font-weight: 500; }
+.file-section .header-row .count { font-size: 12px; color: #bbb; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding-bottom: 6px; }
+.file-card { background: #fff; border-radius: 8px; border: 1px solid #eee; overflow: hidden; transition: all .2s; cursor: default; }
+.file-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.06); border-color: #ddd; }
+.file-card.selected { border-color: #07c160; box-shadow: 0 0 0 1px #07c160; }
+.file-card .thumb-wrap { position: relative; width: 100%; aspect-ratio: 16/9; background: #f5f5f5; overflow: hidden; cursor: pointer; }
+.file-card .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+.file-card:hover .thumb-wrap img { transform: scale(1.03); }
+.file-card .cdn-badge { position: absolute; top: 4px; right: 4px; padding: 1px 6px; border-radius: 3px; font-size: 10px; color: #fff; font-weight: 500; }
+.file-card .cdn-badge.done { background: #07c160; }
+.file-card .cdn-badge.pending { background: #faad14; animation: pulse 1s infinite; }
+.file-card .cdn-badge.none { background: rgba(0,0,0,.35); backdrop-filter: blur(2px); }
+.file-card .body { padding: 5px 8px 6px; }
+.file-card .body input { width: 100%; border: 1px solid #eee; border-radius: 4px; padding: 3px 6px; font-size: 12px; outline: none; transition: border .2s; }
+.file-card .body input:focus { border-color: #07c160; }
+.file-card .body .file-name { font-size: 10px; color: #bbb; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-card .actions { display: flex; gap: 3px; padding: 0 6px 6px; }
+.file-card .actions .btn { flex: 1; text-align: center; padding: 2px 4px; font-size: 11px; }
+
+/* Workspace (bottom section) */
+.editors-panel { width: 55%; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #e8e8e8; }
+.editors-panel .panel-tabs { display: flex; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; }
+.editors-panel .panel-tabs .tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+.editors-panel .panel-tabs .tab.active { border-bottom-color: #07c160; color: #07c160; font-weight: 600; }
+.editors-panel .panel-tabs .tab:hover { color: #07c160; }
+.editors-panel .editor-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.editors-panel .editor-body .editor-pane { display: none; flex-direction: column; height: 100%; }
+.editors-panel .editor-body .editor-pane.active { display: flex; }
+.editors-panel .editor-body .editor-pane .meta-fields { padding: 8px 12px; display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.editors-panel .editor-body .editor-pane .meta-fields input { flex: 1; min-width: 100px; padding: 5px 8px; border: 1px solid #e8e8e8; border-radius: 3px; font-size: 12px; outline: none; }
+.editors-panel .editor-body .editor-pane .meta-fields input:focus { border-color: #07c160; }
+.editors-panel .editor-body .editor-pane textarea { flex: 1; width: 100%; border: none; border-top: 1px solid #e8e8e8; padding: 10px 12px; font-family: "Courier New", monospace; font-size: 13px; line-height: 1.5; resize: none; outline: none; tab-size: 2; }
+.editors-panel .editor-body .editor-pane .hint { padding: 4px 12px; font-size: 11px; color: #999; background: #fafafa; border-top: 1px solid #e8e8e8; flex-shrink: 0; }
+
+
+/* Loop Template Selector */
+.template-selector { padding: 8px 0; max-height: 100%; overflow-y: auto; flex-shrink: 0; }
+.template-selector::-webkit-scrollbar { width: 4px; }
+.template-selector::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+.tpl-section-label { font-size: 12px; font-weight: 600; color: #999; padding: 8px 16px 6px; letter-spacing: .5px; }
+.tpl-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 0 12px 12px; }
+.tpl-card { border: 2px solid transparent; border-radius: 6px; cursor: pointer; overflow: hidden; transition: border-color .2s; background: #fff; }
+.tpl-card:hover { border-color: #e0e0e0; }
+.tpl-card.selected { border-color: #07c160; }
+.tpl-card img { max-width: 100% !important; height: auto; display: block; }
+.tpl-card section { max-width: 100% !important; }
+.tpl-card svg { max-width: 100% !important; }
+.tpl-card.custom-opt { border-style: dashed; display: flex; align-items: center; justify-content: center; min-height: 60px; grid-column: 1 / -1; color: #999; font-size: 13px; font-weight: 500; }
+
+.loop-editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.loop-editor-area .custom-editor { display: none; flex-direction: column; flex: 1; }
+.loop-editor-area .custom-editor.active { display: flex; }
+
+/* Preview Panel */
+.preview-panel { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; }
+.preview-panel .preview-toolbar { padding: 8px 12px; display: flex; align-items: center; gap: 8px; background: #fff; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; flex-wrap: wrap; }
+.preview-panel .preview-toolbar span { font-size: 13px; font-weight: 600; flex: 1; }
+.preview-panel iframe { flex: 1; width: 100%; border: none; background: #fff; }
+
+/* Toast */
+.toast { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 6px; color: #fff; font-size: 14px; z-index: 9999; transform: translateY(-20px); opacity: 0; transition: all .3s; pointer-events: none; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { background: #07c160; }
+.toast.error { background: #ff4d4f; }
+.toast.info { background: #1890ff; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bfbfbf; }
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .bottom-section { flex-direction: column; }
+  .editors-panel { width: 100%; border-right: none; border-bottom: 1px solid #e8e8e8; max-height: 50%; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Header -->
+  <header>
+    <div>
+      <h1>微信图文生成工具</h1>
+      <div class="subtitle">批量上传 · 模板编辑 · 一键生成</div>
+    </div>
+    <div class="port">本地服务运行中</div>
+  </header>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-indicator">
+      <span class="dot off" id="loginDot"></span>
+      <span id="loginText">未登录微信</span>
+    </div>
+    <button class="btn btn-primary btn-sm" id="btnLogin" onclick="handleLogin()">登录微信</button>
+    <button class="btn btn-default btn-sm" id="btnBatchCDN" onclick="handleBatchUploadCDN()" disabled>上传选中到微信CDN</button>
+    <button class="btn btn-danger btn-sm" onclick="handleClearAll()">清空全部</button>
+    <span id="fileCount" style="font-size:12px;color:#999;margin-left:auto;">共 0 个文件</span>
+  </div>
+
+  <div class="main-content">
+    <!-- Top: Upload + Files -->
+    <div class="top-section">
+      <div class="upload-zone">
+        <div class="drop-area" id="dropArea">
+          <div class="upload-icon">
+            <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+          </div>
+          <div class="upload-text">上传图片文件</div>
+          <div class="upload-hint">拖拽到此处，或点击选择</div>
+          <div class="upload-progress" id="uploadProgress"><bar><span id="progressBar"></span></bar></div>
+          <input type="file" id="fileInput" multiple accept="image/*" />
+        </div>
+      </div>
+
+      <div class="file-section" id="fileSection">
+        <div class="header-row">
+          <h3>已上传文件</h3>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn btn-default btn-sm" onclick="addTextItem()">+ 添加文本</button>
+            <span class="count">点击图片可切换选中</span>
+          </div>
+        </div>
+        <div class="file-grid" id="fileGrid"></div>
+      </div>
+    </div>
+
+    <!-- Bottom: Editors + Preview -->
+    <div class="bottom-section">
+      <!-- Left: Template Editors -->
+      <div class="editors-panel">
+        <div class="panel-tabs">
+          <div class="tab active" data-tab="page" onclick="switchTab('page')">页面模板</div>
+          <div class="tab" data-tab="loop" onclick="switchTab('loop')">循环模板</div>
+        </div>
+        <div class="editor-body">
+          <!-- Page Template Pane -->
+          <div class="editor-pane active" id="pane-page">
+            <div class="meta-fields">
+              <input id="articleTitle" placeholder="文章标题" value="搞笑图片每日精选" oninput="schedulePreview()" />
+              <input id="articleDate" placeholder="日期" oninput="schedulePreview()" />
+              <input id="articleAuthor" placeholder="作者" value="搞笑君" oninput="schedulePreview()" />
+            </div>
+            <textarea id="pageTemplate" spellcheck="false" oninput="schedulePreview()">
+            </textarea>
+            <div class="hint">可用变量: {{TITLE}} {{DATE}} {{AUTHOR}} {{CONTENT}} ← 循环内容将插入此处</div>
+          </div>
+          <!-- Loop Template Pane -->
+          <div class="editor-pane" id="pane-loop">
+            <div class="template-selector" id="templateSelector"></div>
+            <div class="loop-editor-area" style="display:none;">
+              <textarea id="loopTemplate" spellcheck="false" ></textarea>
+              <div class="custom-editor" id="customEditor">
+                <textarea id="customTemplateEditor" spellcheck="false" oninput="onCustomTemplateChange()" placeholder="在此编辑自定义循环模板..."></textarea>
+                <div class="hint" id="loopHint">可用变量: {{IMAGE}} {{TITLE}} {{INDEX}} (序号自增)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Preview -->
+      <div class="preview-panel">
+        <div class="preview-toolbar">
+          <span>预览</span>
+          <button class="btn btn-default btn-sm" onclick="copyHTML()">预览并复制</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadHTML()">下载文件</button>
+        </div>
+        <iframe id="previewFrame" sandbox="allow-scripts"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== State ====================
+let files = [];
+let selectedIds = new Set();
+let previewTimer = null;
+let loginPollTimer = null;
+let templateData = null;
+
+// ==================== Toast ====================
+function showToast(msg, type = 'success', duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ==================== Tabs ====================
+function switchTab(name) {
+  document.querySelectorAll('.panel-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.editor-pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+}
+
+// ==================== Loop Template Selector ====================
+let selectedTitleId = null;
+let selectedBorderId = null;
+let loop135Data = null;
+
+function initTemplateSelector() {
+  const container = document.getElementById('templateSelector');
+  if (!loop135Data) return;
+
+  const PLACEHOLDER_IMG = '<img src="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27400%27 height=%27260%27%3E%3Crect width=%27400%27 height=%27260%27 fill=%27%23e8e8e8%27/%3E%3Ctext x=%27200%27 y=%27140%27 text-anchor=%27middle%27 fill=%27%23bbb%27 font-size=%2720%27%3E%E5%9B%BE%E7%89%87%3C/text%3E%3C/svg%3E" style="max-width:100%;display:block;" />';
+  let html = '';
+
+  // Section: 序号模板
+  const titles = loop135Data.title && loop135Data.title.presets ? loop135Data.title.presets : [];
+  if (titles.length > 0) {
+    html += '<div class="tpl-section-label">▎序号模板</div>';
+    html += '<div class="tpl-grid">';
+    // 不要序号选项
+    html += '<div class="tpl-card' + (selectedTitleId === 'none' ? ' selected' : '') + '" data-id="none" data-section="title" onclick="selectTemplate(\'none\',\'title\')" style="border-style:dashed;display:flex;align-items:center;justify-content:center;min-height:50px;color:#999;font-size:13px;font-weight:500;grid-column:1/-1;">不要序号</div>';
+    for (const p of titles) {
+      let rendered = p.template
+        .replace(/\{\{IMAGE\}\}/g, PLACEHOLDER_IMG)
+        .replace(/\{\{TITLE\}\}/g, '标题文字')
+        .replace(/\{\{INDEX\}\}/g, '1');
+      html += '<div class="tpl-card' + (selectedTitleId === p.id ? ' selected' : '') + '" data-id="' + p.id + '" data-section="title" onclick="selectTemplate(\'' + p.id + '\',\'title\')">' + rendered + '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Section: 正文模板
+  const borders = loop135Data.border && loop135Data.border.presets ? loop135Data.border.presets : [];
+  if (borders.length > 0) {
+    html += '<div style="border-top:1px solid #e8e8e8;margin:4px 12px 0;"></div>';
+    html += '<div class="tpl-section-label">▎正文模板</div>';
+    html += '<div class="tpl-grid">';
+    for (const p of borders) {
+      let rendered = p.template
+        .replace(/\{\{IMAGE\}\}/g, PLACEHOLDER_IMG)
+        .replace(/\{\{TITLE\}\}/g, '标题文字')
+        .replace(/\{\{INDEX\}\}/g, '1');
+      html += '<div class="tpl-card' + (selectedBorderId === p.id ? ' selected' : '') + '" data-id="' + p.id + '" data-section="border" onclick="selectTemplate(\'' + p.id + '\',\'border\')">' + rendered + '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Custom option
+  html += '<div style="border-top:1px solid #e8e8e8;margin:4px 12px 0;"></div>';
+  html += '<div class="tpl-grid">';
+  html += '<div class="tpl-card custom-opt" data-id="custom" onclick="selectCustom()">自定义模板</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+
+  // Auto-select first in each section
+  if (!selectedTitleId && titles.length > 0) {
+    selectedTitleId = titles[0].id;
+    container.querySelector('.tpl-card[data-section="title"][data-id="' + selectedTitleId + '"]')?.classList.add('selected');
+  }
+  if (!selectedBorderId && borders.length > 0) {
+    selectedBorderId = borders[0].id;
+    container.querySelector('.tpl-card[data-section="border"][data-id="' + selectedBorderId + '"]')?.classList.add('selected');
+  }
+  applySelectedTemplate();
+}
+
+function selectTemplate(id, section) {
+  // Deselect custom
+  document.querySelector('.tpl-card.custom-opt')?.classList.remove('selected');
+
+  if (section === 'title') {
+    selectedTitleId = id;
+    document.querySelectorAll('.tpl-card[data-section="title"]').forEach(function(el) {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+  } else {
+    selectedBorderId = id;
+    document.querySelectorAll('.tpl-card[data-section="border"]').forEach(function(el) {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+  }
+  applySelectedTemplate();
+  schedulePreview();
+}
+
+function selectCustom() {
+  document.querySelector('.tpl-card.custom-opt')?.classList.add('selected');
+  document.querySelectorAll('.tpl-card[data-section]').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+  const hiddenTa = document.getElementById('loopTemplate');
+  const customEditor = document.getElementById('customEditor');
+  const customTa = document.getElementById('customTemplateEditor');
+  customEditor.classList.add('active');
+  hiddenTa.value = customTa.value;
+  schedulePreview();
+}
+
+function applySelectedTemplate() {
+  const hiddenTa = document.getElementById('loopTemplate');
+  const customEditor = document.getElementById('customEditor');
+
+  // If custom is active, keep showing custom editor
+  if (document.querySelector('.tpl-card.custom-opt.selected')) {
+    return;
+  }
+
+  customEditor.classList.remove('active');
+
+  const allPresets = [
+    ...((loop135Data && loop135Data.title && loop135Data.title.presets) || []),
+    ...((loop135Data && loop135Data.border && loop135Data.border.presets) || [])
+  ];
+  const titlePreset = allPresets.find(function(p) { return p.id === selectedTitleId; });
+  const borderPreset = allPresets.find(function(p) { return p.id === selectedBorderId; });
+
+  let combined = '';
+  if (selectedTitleId !== 'none' && titlePreset) combined += titlePreset.template;
+  if (borderPreset) combined += borderPreset.template;
+  hiddenTa.value = combined;
+}
+
+function onCustomTemplateChange() {
+  const customTa = document.getElementById('customTemplateEditor');
+  const hiddenTa = document.getElementById('loopTemplate');
+  hiddenTa.value = customTa.value;
+  schedulePreview();
+}
+
+
+
+// ==================== Login ====================
+async function handleLogin() {
+  const btn = document.getElementById('btnLogin');
+  const dot = document.getElementById('loginDot');
+  const text = document.getElementById('loginText');
+  btn.disabled = true;
+  dot.className = 'dot loading';
+  text.textContent = '正在打开微信登录...';
+
+  try {
+    const resp = await fetch('/api/login', { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      text.textContent = '请在浏览器窗口中扫码登录...';
+      // Start polling for status
+      pollLoginStatus();
+    } else {
+      showToast('登录启动失败: ' + (data.error || ''), 'error');
+      btn.disabled = false;
+      dot.className = 'dot off';
+      text.textContent = '未登录微信';
+    }
+  } catch (e) {
+    showToast('请求失败: ' + e.message, 'error');
+    btn.disabled = false;
+    dot.className = 'dot off';
+    text.textContent = '未登录微信';
+  }
+}
+
+async function pollLoginStatus() {
+  if (loginPollTimer) clearInterval(loginPollTimer);
+  loginPollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch('/api/status');
+      const data = await resp.json();
+      if (data.logged_in) {
+        clearInterval(loginPollTimer);
+        loginPollTimer = null;
+        const dot = document.getElementById('loginDot');
+        const text = document.getElementById('loginText');
+        dot.className = 'dot on';
+        text.textContent = '已登录微信';
+        document.getElementById('btnLogin').disabled = false;
+        document.getElementById('btnLogin').textContent = '重新登录';
+        document.getElementById('btnBatchCDN').disabled = false;
+        showToast('微信登录成功！', 'success');
+      }
+    } catch (e) {
+      // ignore polling errors
+    }
+  }, 2000);
+  // Stop polling after 3 minutes
+  setTimeout(() => {
+    if (loginPollTimer) {
+      clearInterval(loginPollTimer);
+      loginPollTimer = null;
+      const dot = document.getElementById('loginDot');
+      const text = document.getElementById('loginText');
+      if (!dot.classList.contains('on')) {
+        dot.className = 'dot off';
+        text.textContent = '登录超时，请重试';
+        document.getElementById('btnLogin').disabled = false;
+      }
+    }
+  }, 180000);
+}
+
+// ==================== File Management ====================
+async function loadFiles() {
+  try {
+    const resp = await fetch('/api/files');
+    const data = await resp.json();
+    files = data.files || [];
+    renderFiles();
+  } catch (e) {
+    showToast('加载文件列表失败', 'error');
+  }
+}
+
+function renderFiles() {
+  const grid = document.getElementById('fileGrid');
+  const count = document.getElementById('fileCount');
+  count.textContent = `共 ${files.length} 个文件`;
+
+  if (files.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:#ccc;font-size:14px;">暂无文件，请上传图片</div>';
+    return;
+  }
+
+  grid.innerHTML = files.map(f => {
+    if (f.type === 'txt') {
+      return `<div class="file-card" data-id="${f.id}" style="border-style:dashed;border-color:#ddd;">
+        <div style="background:#f9f9f9;padding:10px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eee;">
+          <span style="font-size:16px;font-weight:700;color:#07c160;">T</span>
+          <span style="font-size:12px;color:#999;">文本段落</span>
+        </div>
+        <div class="body" style="display:flex;flex-direction:column;gap:4px;">
+          <input type="text" value="${escapeHtml(f.title || '')}" placeholder="段落标题..." onchange="updateTitle('${f.id}', this.value)" onclick="event.stopPropagation()" />
+          <textarea rows="3" placeholder="正文内容..." style="border:1px solid #eee;border-radius:4px;padding:4px 6px;font-size:12px;outline:none;resize:vertical;font-family:inherit;" onchange="updateContent('${f.id}', this.value)" onclick="event.stopPropagation()">${escapeHtml(f.content || '')}</textarea>
+        </div>
+        <div class="actions">
+          <button class="btn btn-sm btn-default" onclick="event.stopPropagation();moveFile('${f.id}', -1)" title="上移">↑</button>
+          <button class="btn btn-sm btn-default" onclick="event.stopPropagation();moveFile('${f.id}', 1)" title="下移">↓</button>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteFile('${f.id}')">删除</button>
+        </div>
+      </div>`;
+    }
+    const checked = selectedIds.has(f.id) ? 'checked' : '';
+    const dotClass = f.cdn_url ? 'done' : (f.uploading ? 'pending' : 'none');
+    const dotLabel = f.cdn_url ? '已上传' : (f.uploading ? '上传中' : '未上传');
+    return `<div class="file-card" data-id="${f.id}">
+      <div class="thumb-wrap" onclick="toggleSelect('${f.id}')">
+        <img src="/api/thumb/${f.id}" alt="${f.filename}" loading="lazy" />
+        <span class="cdn-badge ${dotClass}">${dotLabel}</span>
+        ${checked ? '<span style="position:absolute;top:4px;left:4px;background:#07c160;color:#fff;border-radius:3px;padding:1px 5px;font-size:11px;">✓</span>' : ''}
+      </div>
+      <div class="body">
+        <input type="text" value="${escapeHtml(f.caption || '')}" placeholder="输入标题文字..." onchange="updateCaption('${f.id}', this.value)" onclick="event.stopPropagation()" />
+        <div class="file-name">${f.filename}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sm btn-default" onclick="event.stopPropagation();moveFile('${f.id}', -1)" title="上移">↑</button>
+        <button class="btn btn-sm btn-default" onclick="event.stopPropagation();moveFile('${f.id}', 1)" title="下移">↓</button>
+        <button class="btn btn-sm ${f.cdn_url ? 'btn-default' : 'btn-warning'}" onclick="event.stopPropagation();uploadToCDN('${f.id}')" ${f.cdn_url ? 'disabled' : ''}>
+          ${f.cdn_url ? '已上传' : '上传CDN'}
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteFile('${f.id}')">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toggleSelect(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  renderFiles();
+}
+
+// ==================== Upload ====================
+const dropArea = document.getElementById('dropArea');
+const fileInput = document.getElementById('fileInput');
+
+dropArea.addEventListener('click', () => fileInput.click());
+dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag-over'));
+dropArea.addEventListener('drop', (e) => { e.preventDefault(); dropArea.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => { handleFiles(fileInput.files); fileInput.value = ''; });
+
+async function handleFiles(fileList) {
+  const formData = new FormData();
+  for (const f of fileList) formData.append('files', f);
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`成功上传 ${data.count} 个文件`, 'success');
+      await loadFiles();
+      schedulePreview();
+    } else {
+      showToast('上传失败: ' + (data.error || ''), 'error');
+    }
+  } catch (e) {
+    showToast('上传请求失败: ' + e.message, 'error');
+  }
+}
+
+// ==================== CDN Upload ====================
+async function uploadToCDN(id) {
+  const file = files.find(f => f.id === id);
+  if (!file || file.cdn_url) return;
+  file.uploading = true;
+  renderFiles();
+  try {
+    const resp = await fetch('/api/upload-wechat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: id }),
+    });
+    const data = await resp.json();
+    if (data.success && data.cdn_url) {
+      file.cdn_url = data.cdn_url;
+      file.uploading = false;
+      showToast(`${file.filename} 上传CDN成功`, 'success');
+    } else {
+      file.uploading = false;
+      showToast('上传CDN失败: ' + (data.error || ''), 'error');
+    }
+    await loadFiles();
+    schedulePreview();
+  } catch (e) {
+    file.uploading = false;
+    renderFiles();
+    showToast('上传请求失败: ' + e.message, 'error');
+  }
+}
+
+async function handleBatchUploadCDN() {
+  if (selectedIds.size === 0) {
+    showToast('请先点击图片选中要上传的文件', 'info');
+    return;
+  }
+  const toUpload = files.filter(f => selectedIds.has(f.id) && !f.cdn_url);
+  if (toUpload.length === 0) {
+    showToast('选中的文件都已上传到CDN', 'info');
+    return;
+  }
+  for (const f of toUpload) {
+    await uploadToCDN(f.id);
+  }
+  showToast(`批量上传完成: ${toUpload.length} 个文件`, 'success');
+}
+
+// ==================== CRUD ====================
+async function addTextItem() {
+  try {
+    const resp = await fetch('/api/text', { method: 'POST' });
+    const data = await resp.json();
+    if (data.success) {
+      await loadFiles();
+      schedulePreview();
+      showToast('已添加文本段落', 'success');
+    }
+  } catch (e) {
+    showToast('添加失败: ' + e.message, 'error');
+  }
+}
+
+async function updateTitle(id, title) {
+  const f = files.find(x => x.id === id);
+  if (f) f.title = title;
+  try {
+    await fetch('/api/files/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    schedulePreview();
+  } catch (e) {}
+}
+
+async function updateContent(id, content) {
+  const f = files.find(x => x.id === id);
+  if (f) f.content = content;
+  try {
+    await fetch('/api/files/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    schedulePreview();
+  } catch (e) {}
+}
+
+async function updateCaption(id, caption) {
+  try {
+    await fetch('/api/files/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caption }),
+    });
+    const f = files.find(x => x.id === id);
+    if (f) f.caption = caption;
+    schedulePreview();
+  } catch (e) {
+    showToast('更新失败', 'error');
+  }
+}
+
+async function deleteFile(id) {
+  if (!confirm('确定删除该文件吗？')) return;
+  try {
+    await fetch('/api/files/' + id, { method: 'DELETE' });
+    selectedIds.delete(id);
+    await loadFiles();
+    schedulePreview();
+    showToast('已删除', 'info');
+  } catch (e) {
+    showToast('删除失败', 'error');
+  }
+}
+
+async function moveFile(id, direction) {
+  const idx = files.findIndex(f => f.id === id);
+  if (idx === -1) return;
+  const target = idx + direction;
+  if (target < 0 || target >= files.length) return;
+  [files[idx], files[target]] = [files[target], files[idx]];
+  const newOrder = files.map(f => f.id);
+  try {
+    await fetch('/api/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: newOrder }),
+    });
+    renderFiles();
+    schedulePreview();
+  } catch (e) {
+    showToast('排序失败', 'error');
+    await loadFiles();
+  }
+}
+
+async function handleClearAll() {
+  if (!confirm('确定清空所有文件吗？此操作不可恢复！')) return;
+  try {
+    await fetch('/api/files', { method: 'DELETE' });
+    selectedIds.clear();
+    await loadFiles();
+    schedulePreview();
+    showToast('已清空全部', 'info');
+  } catch (e) {
+    showToast('清空失败', 'error');
+  }
+}
+
+// ==================== Preview ====================
+function schedulePreview() {
+  if (previewTimer) clearTimeout(previewTimer);
+  previewTimer = setTimeout(generatePreview, 500);
+}
+
+async function generatePreview() {
+  const items = files.map(f => ({
+    id: f.id,
+    type: f.type || 'img',
+    title: f.type === 'txt' ? (f.title || '') : (f.caption || ''),
+    content: f.content || '',
+    cdn_url: f.cdn_url || '',
+  }));
+  const pageTemplate = document.getElementById('pageTemplate').value;
+  const loopTemplate = document.getElementById('loopTemplate').value;
+  const title = document.getElementById('articleTitle').value;
+  const date = document.getElementById('articleDate').value;
+  const author = document.getElementById('articleAuthor').value;
+
+  try {
+    const resp = await fetch('/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page_template: pageTemplate, loop_template: loopTemplate, items, title, date, author }),
+    });
+    const data = await resp.json();
+    if (data.html) {
+      document.getElementById('previewFrame').srcdoc = data.html;
+    }
+  } catch (e) {
+    // silently ignore preview errors during typing
+  }
+}
+
+// ==================== Export ====================
+async function copyHTML() {
+  const items = files.map(f => ({ id: f.id, type: f.type || 'img',
+      title: f.type === 'txt' ? (f.title || '') : (f.caption || ''), content: f.content || '', cdn_url: f.cdn_url || '' }));
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        page_template: document.getElementById('pageTemplate').value,
+        loop_template: document.getElementById('loopTemplate').value,
+        items,
+        title: document.getElementById('articleTitle').value,
+        date: document.getElementById('articleDate').value,
+        author: document.getElementById('articleAuthor').value,
+      }),
+    });
+    const data = await resp.json();
+    if (data.html) {
+      const w = window.open('', '_blank');
+      if (!w) {
+        showToast('请允许弹出窗口，或手动下载 HTML 文件', 'error');
+        return;
+      }
+      // w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + escapeHtml(document.getElementById('articleTitle').value || '预览') + '</title></head><body>' + data.html + '</body></html>');
+      // w.document.close();
+      showToast('请按 Ctrl+A 全选，Ctrl+C 复制，粘贴到公众号编辑器', 'info', 5000);
+    }
+  } catch (e) {
+    showToast('预览失败: ' + e.message, 'error');
+  }
+}
+
+async function downloadHTML() {
+  const items = files.map(f => ({ id: f.id, type: f.type || 'img',
+      title: f.type === 'txt' ? (f.title || '') : (f.caption || ''), content: f.content || '', cdn_url: f.cdn_url || '' }));
+  try {
+    const resp = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        page_template: document.getElementById('pageTemplate').value,
+        loop_template: document.getElementById('loopTemplate').value,
+        items,
+        title: document.getElementById('articleTitle').value,
+        date: document.getElementById('articleDate').value,
+        author: document.getElementById('articleAuthor').value,
+      }),
+    });
+    const data = await resp.json();
+    if (data.html) {
+      const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (document.getElementById('articleTitle').value || 'article') + '.html';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('文件已下载！', 'success');
+    }
+  } catch (e) {
+    showToast('下载失败: ' + e.message, 'error');
+  }
+}
+
+// ==================== Check login status on load ====================
+async function checkLoginStatus() {
+  try {
+    const resp = await fetch('/api/status');
+    const data = await resp.json();
+    if (data.logged_in) {
+      document.getElementById('loginDot').className = 'dot on';
+      document.getElementById('loginText').textContent = '已登录微信';
+      document.getElementById('btnLogin').textContent = '重新登录';
+      document.getElementById('btnBatchCDN').disabled = false;
+    }
+  } catch (e) {}
+}
+
+// ==================== Init ====================
+async function init() {
+  // Load template config
+  try {
+    const resp = await fetch('/static/templates.json');
+    window._tplData = await resp.json();
+    document.getElementById('pageTemplate').value = window._tplData.page.default || '{{CONTENT}}';
+  } catch (e) {
+    document.getElementById('pageTemplate').value = '{{CONTENT}}';
+  }
+  // Load 135 editor templates
+  try {
+    const resp135 = await fetch('/static/135_templates.json');
+    loop135Data = await resp135.json();
+  } catch (e) {
+    loop135Data = { title: { presets: [] }, border: { presets: [] } };
+  }
+  document.getElementById('articleDate').value = new Date().toISOString().slice(0, 10);
+  initTemplateSelector();
+  loadFiles();
+  checkLoginStatus();
+  setTimeout(generatePreview, 300);
+}
+init();</script>
+</body>
+</html>
